@@ -9,6 +9,8 @@
 #define CMD_PREAMBLE	'+'
 #define CMD_STATUS	0x10
 #define CMD_GET_VDC	0x13
+#define CMD_RTC_GET	0x14
+#define CMD_RTC_SET	0x15
 #define CMD_MEM_RD	0x19
 #define CMD_MEM_WR	0x1A
 #define CMD_STATUS2	0x40
@@ -42,6 +44,8 @@ struct __attribute__((packed)) everdrive_pkt_hdr {
 
 static const struct everdrive_pkt_hdr pkt_status = DEFINEPKT(CMD_STATUS);
 static const struct everdrive_pkt_hdr pkt_vdc = DEFINEPKT(CMD_GET_VDC);
+static const struct everdrive_pkt_hdr pkt_rtc_get = DEFINEPKT(CMD_RTC_GET);
+static const struct everdrive_pkt_hdr pkt_rtc_set = DEFINEPKT(CMD_RTC_SET);
 static const struct everdrive_pkt_hdr pkt_memrd = DEFINEPKT(CMD_MEM_RD);
 static const struct everdrive_pkt_hdr pkt_memwr = DEFINEPKT(CMD_MEM_WR);
 static const struct everdrive_pkt_hdr pkt_status2 = DEFINEPKT(CMD_STATUS2);
@@ -275,6 +279,42 @@ static int get_vdc(struct cntx *cntx)
 	return 0;
 }
 
+static int get_rtc(struct cntx *cntx)
+{
+	uint8_t vdc;
+	int ret;
+
+	ret = send_cmd(cntx, &pkt_rtc_get);
+	if (ret)
+		return ret;
+
+	ret = read8(cntx, &vdc);
+	if (ret)
+		return ret;
+
+	ret = read8(cntx, &vdc);
+	if (ret)
+		return ret;
+
+	ret = read8(cntx, &vdc);
+	if (ret)
+		return ret;
+
+	ret = read8(cntx, &vdc);
+	if (ret)
+		return ret;
+
+	ret = read8(cntx, &vdc);
+	if (ret)
+		return ret;
+
+	ret = read8(cntx, &vdc);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int read_fifo(struct cntx *cntx, size_t howmuch)
 {
 	uint32_t addr = ADDR_FIFO;
@@ -320,6 +360,8 @@ int main(int argc, char **argv)
 	get_status2(&cntx);
 
 	get_vdc(&cntx);
+
+	get_rtc(&cntx);
 
 	read_fifo(&cntx, 1);
 

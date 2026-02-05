@@ -28,6 +28,7 @@
 #define DEVID_MEGAPRO	0x18
 #define DEVID_MEGACORE	0x25
 
+#define ADDR_ROM	0x0000000
 #define ADDR_FIFO	0x1810000
 #define SIZE_FIFO	2048
 
@@ -321,21 +322,29 @@ static int get_rtc(struct cntx *cntx)
 	return 0;
 }
 
-static int read_fifo(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
+static int read_mem(struct cntx *cntx, uint8_t *whereto, uint32_t wherefrom, uint32_t howmuch)
 {
-	uint32_t addr = ADDR_FIFO;
-	uint32_t len = howmuch;
-	int i;
+	int i, ret;
 
 	send_cmd(cntx, &pkt_memrd);
-	write32(cntx, addr);
-	write32(cntx, len);
+	write32(cntx, wherefrom);
+	write32(cntx, howmuch);
 	write8(cntx, 0);
 
-	for (i = 0; i < len; i++)
-		read8(cntx, whereto++);
+	for (i = 0; i < howmuch; i++)
+		ret = read8(cntx, whereto++);
 
-	return 0;
+	return i;
+}
+
+static int read_rom(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
+{
+	return read_mem(cntx, whereto, ADDR_ROM, howmuch);
+}
+
+static int read_fifo(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
+{
+	return read_mem(cntx, whereto, ADDR_FIFO, howmuch);
 }
 
 static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
@@ -401,8 +410,12 @@ int main(int argc, char **argv)
 	//	printf("\'%c\'\n", (char) ch);
 	//}
 
-	const char test[] = "hello, world";
-	write_fifo(&cntx, (uint8_t*) test, sizeof(test));
+	//const char test[] = "hello, world";
+	//write_fifo(&cntx, (uint8_t*) test, sizeof(test));
+
+	uint8_t buf[128];
+	read_rom(&cntx, buf, 128);
+	hexdump(buf, 128);
 
 	return 0;
 }

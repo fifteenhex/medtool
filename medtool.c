@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <termios.h>
 
 #define DEBUG
 
@@ -334,6 +335,7 @@ static int read_fifo(struct cntx *cntx, size_t howmuch)
 int main(int argc, char **argv)
 {
 	struct cntx cntx = { 0 };
+	struct termios tty;
 	const char *port_path;
 	int port_fd;
 
@@ -348,6 +350,10 @@ int main(int argc, char **argv)
 		printf("failed to open serial port \'%s\': %d\n", port_path, port_fd);
 		return 1;
 	}
+
+	tcgetattr(port_fd, &tty);
+	cfmakeraw(&tty);
+	tcsetattr(port_fd, TCSANOW, &tty);
 
 #ifdef DEBUG
 	printf("Opened serial port %s\n", port_path);

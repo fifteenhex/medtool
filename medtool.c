@@ -31,6 +31,7 @@
 #define ADDR_ROM	0x0000000
 #define ADDR_FIFO	0x1810000
 #define SIZE_FIFO	2048
+#define ADDR_MAP	0x1830000
 
 struct cntx {
 	int port_fd;
@@ -347,6 +348,11 @@ static int read_fifo(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
 	return read_mem(cntx, whereto, ADDR_FIFO, howmuch);
 }
 
+static int read_mapper(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
+{
+	return read_mem(cntx, whereto, ADDR_MAP, howmuch);
+}
+
 static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
 {
 	uint32_t addr = ADDR_FIFO;
@@ -404,18 +410,20 @@ int main(int argc, char **argv)
 
 	get_rtc(&cntx);
 
-	//for (int i = 0; i < 1; i++) {
-	//	uint8_t ch;
-	//	read_fifo(&cntx, &ch, 1);
-	//	printf("\'%c\'\n", (char) ch);
-	//}
+	for (int i = 0; i < 1; i++) {
+		uint8_t ch;
+		read_fifo(&cntx, &ch, 1);
+		printf("\'%c\'\n", (char) ch);
+	}
 
 	//const char test[] = "hello, world";
 	//write_fifo(&cntx, (uint8_t*) test, sizeof(test));
 
-	uint8_t buf[128];
-	read_rom(&cntx, buf, 128);
-	hexdump(buf, 128);
+	uint8_t buf[64];
+	read_rom(&cntx, buf, sizeof(buf));
+	hexdump(buf, sizeof(buf));
+
+	ret = get_status2(&cntx);
 
 	return 0;
 }

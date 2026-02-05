@@ -17,8 +17,8 @@
 #define CMD_STATUS2	0x40
 
 
-#define STATUS_MASK	0xff00
-#define STATUS_CHECK	0xa500
+#define STATUS_MASK			0xff00
+#define STATUS_CHECK			0xa500
 #define status2_check(_status2)		((_status2 >> 24) & 0xff)
 #define status2_protocolid(_status2)	((_status2 >> 16) & 0xff)
 #define status2_devid(_status2)		((_status2 >> 8) & 0xff)
@@ -29,6 +29,7 @@
 #define DEVID_MEGACORE	0x25
 
 #define ADDR_FIFO	0x1810000
+#define SIZE_FIFO	2048
 
 struct cntx {
 	int port_fd;
@@ -212,11 +213,15 @@ static int get_status2(struct cntx *cntx)
 	if (ret)
 		return ret;
 
-	if (status2_check(status2) != STATUS2_CHECK)
+	if (status2_check(status2) != STATUS2_CHECK) {
 		printf("bad status2 reply 0x%08x\n", (unsigned int) status2);
+		return -1;
+	}
 
-	if (status2_protocolid(status2) != PROTOCOL_ID)
+	if (status2_protocolid(status2) != PROTOCOL_ID) {
 		printf("bad protocol id\n");
+		return -1;
+	}
 
 	switch(status2_devid(status2)){
 		case DEVID_MEGACORE:
@@ -316,27 +321,27 @@ static int get_rtc(struct cntx *cntx)
 	return 0;
 }
 
-static int read_fifo(struct cntx *cntx, size_t howmuch)
+static int read_fifo(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
 {
 	uint32_t addr = ADDR_FIFO;
-	uint32_t len = 1;
-	uint8_t result;
+	uint32_t len = howmuch;
+	int i;
 
 	send_cmd(cntx, &pkt_memrd);
 	write32(cntx, addr);
 	write32(cntx, len);
 	write8(cntx, 0);
 
-	read8(cntx, &result);
+	for (i = 0; i < len; i++)
+		read8(cntx, whereto++);
 
 	return 0;
 }
 
-static int write_fifo(struct cntx *cntx, uint8_t *what, size_t howmuch)
+static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
 {
 	uint32_t addr = ADDR_FIFO;
 	uint32_t len = howmuch;
-	uint8_t result;
 	int i;
 
 	send_cmd(cntx, &pkt_memwr);
@@ -356,6 +361,7 @@ int main(int argc, char **argv)
 	const char *port_path;
 	struct termios tty;
 	int port_fd;
+	int ret;
 
 	if (argc == 1) {
 		printf("%s <serial port path>\n", argv[0]);
@@ -381,13 +387,19 @@ int main(int argc, char **argv)
 	cntx.port_fd = port_fd;
 
 	/* Start poking the bear ... */
-	get_status2(&cntx);
+	ret = get_status2(&cntx);
+	if (ret)
+		return 1;
 
 	get_vdc(&cntx);
 
 	get_rtc(&cntx);
 
-	//read_fifo(&cntx, 1);
+	//for (int i = 0; i < 1; i++) {
+	//	uint8_t ch;
+	//	read_fifo(&cntx, &ch, 1);
+	//	printf("\'%c\'\n", (char) ch);
+	//}
 
 	const char test[] = "hello, world";
 	write_fifo(&cntx, (uint8_t*) test, sizeof(test));

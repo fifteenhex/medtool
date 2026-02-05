@@ -332,11 +332,29 @@ static int read_fifo(struct cntx *cntx, size_t howmuch)
 	return 0;
 }
 
+static int write_fifo(struct cntx *cntx, uint8_t *what, size_t howmuch)
+{
+	uint32_t addr = ADDR_FIFO;
+	uint32_t len = howmuch;
+	uint8_t result;
+	int i;
+
+	send_cmd(cntx, &pkt_memwr);
+	write32(cntx, addr);
+	write32(cntx, len);
+	write8(cntx, 0);
+
+	for (i = 0; i < len; i++)
+		write8(cntx, what[i]);
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	struct cntx cntx = { 0 };
-	struct termios tty;
 	const char *port_path;
+	struct termios tty;
 	int port_fd;
 
 	if (argc == 1) {
@@ -369,8 +387,10 @@ int main(int argc, char **argv)
 
 	get_rtc(&cntx);
 
-	read_fifo(&cntx, 1);
+	//read_fifo(&cntx, 1);
 
+	const char test[] = "hello, world";
+	write_fifo(&cntx, (uint8_t*) test, sizeof(test));
 
 	return 0;
 }

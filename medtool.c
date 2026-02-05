@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <termios.h>
+#include <poll.h>
 
 #define DEBUG
 
@@ -120,6 +121,33 @@ static int send_cmd(const struct cntx *cntx, const struct everdrive_pkt_hdr *hdr
 		printf("failed to write packet: %d\n", ret);
 		return -1;
 	}
+
+	return 0;
+}
+
+static int canread(const struct cntx *cntx)
+{
+	int ret;
+	struct pollfd pfd = {
+		.fd = cntx->port_fd,
+		.events = POLLIN,
+	};
+
+	ret = poll(&pfd, 1, 0);
+
+	if (ret > 0)
+		if (pfd.revents & POLLIN)
+			return 1;
+
+	return 0;
+}
+
+static int drain(const struct cntx *cntx)
+{
+	uint8_t junk[1];
+
+	while (canread(cntx))
+		read(cntx->port_fd, junk, 1);
 
 	return 0;
 }
@@ -401,29 +429,37 @@ int main(int argc, char **argv)
 	/* Setup the context we'll pass around */
 	cntx.port_fd = port_fd;
 
+	/* Clean up any remaining garbage */
+	drain(&cntx);
+
 	/* Start poking the bear ... */
 	ret = get_status2(&cntx);
 	if (ret)
 		return 1;
 
-	get_vdc(&cntx);
 
-	get_rtc(&cntx);
 
-	for (int i = 0; i < 1; i++) {
-		uint8_t ch;
-		read_fifo(&cntx, &ch, 1);
-		printf("\'%c\'\n", (char) ch);
-	}
+	//get_vdc(&cntx);
+
+	//get_rtc(&cntx);
+
+	//for (int i = 0; i < 1; i++) {
+	//	uint8_t ch;
+	//	read_fifo(&cntx, &ch, 1);
+	//	printf("\'%c\'\n", (char) ch);
+	//}
 
 	//const char test[] = "hello, world";
-	//write_fifo(&cntx, (uint8_t*) test, sizeof(test));
+	//write_fifo(&cntx, (uint8_t*) test, 1);
 
-	uint8_t buf[64];
-	read_rom(&cntx, buf, sizeof(buf));
-	hexdump(buf, sizeof(buf));
+	uint8_t buf[1];
+	return read_fifo(&cntx, buf, 1);
 
-	ret = get_status2(&cntx);
+	//uint8_t buf[64];
+	//read_rom(&cntx, buf, sizeof(buf));
+	//hexdump(buf, sizeof(buf));
+
+	//ret = get_status2(&cntx);
 
 	return 0;
 }

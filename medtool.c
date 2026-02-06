@@ -6,6 +6,10 @@
 #include <termios.h>
 #include <poll.h>
 
+/* For terminal socket */
+#include <sys/socket.h>
+#include <sys/un.h>
+
 #define DEBUG
 
 #define CMD_PREAMBLE	'+'
@@ -398,6 +402,67 @@ static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
 	return 0;
 }
 
+static int create_terminal_socket(const char *path) {
+	int listen_fd, conn_fd;
+	struct sockaddr_un addr = {0};
+	int ret;
+
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, path);
+
+	listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (listen_fd < 0)
+		return -1;
+
+	unlink(path);
+	ret = bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr));
+
+	listen(listen_fd, 1);
+
+	conn_fd = accept(listen_fd, NULL, NULL);
+
+	return conn_fd;
+}
+
+static void terminal(struct cntx *cntx)
+{
+	int conn_fd;
+
+	printf("Creating socket and waiting for connection (minicom -D unix#/tmp/medtool)\n");
+	conn_fd = create_terminal_socket("/tmp/medtool");
+	printf("connected\n");
+
+	while(true)
+	{
+		uint8_t ch;
+		int ret;
+		struct pollfd pfd[2] = {
+		{
+			.fd = cntx->port_fd,
+			.events = POLLIN,
+		},
+		{
+			.fd = conn_fd,
+			.events = POLLIN,
+		},
+		};
+
+		ret = poll(pfd, 2, -1);
+		if (ret > 0) {
+			/* md -> us */
+			if (pfd[0].revents & POLLIN) {
+				read(cntx->port_fd, &ch, 1);
+				write(conn_fd, &ch, 1);
+			}
+			/* us -> md */
+			if (pfd[1].revents & POLLIN) {
+				read(conn_fd, &ch, 1);
+				write_fifo(cntx, &ch, 1);
+			}
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct cntx cntx = { 0 };
@@ -438,6 +503,7 @@ int main(int argc, char **argv)
 		return 1;
 
 
+	terminal(&cntx);
 
 	//get_vdc(&cntx);
 
@@ -452,8 +518,8 @@ int main(int argc, char **argv)
 	//const char test[] = "hello, world";
 	//write_fifo(&cntx, (uint8_t*) test, 1);
 
-	uint8_t buf[1];
-	return read_fifo(&cntx, buf, 1);
+	//uint8_t buf[1];
+	//return read_fifo(&cntx, buf, 2);
 
 	//uint8_t buf[64];
 	//read_rom(&cntx, buf, sizeof(buf));

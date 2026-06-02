@@ -1,16 +1,24 @@
 #include <endian.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <termios.h>
 #include <poll.h>
+#include <string.h>
+#include <stdbool.h>
+#include <getopt.h>
 
 /* For terminal socket */
 #include <sys/socket.h>
 #include <sys/un.h>
 
 #define DEBUG
+
+/* Make my C less awful helpers */
+#define __must_check __attribute__((warn_unused_result))
+#define ARRAY_SIZE(_a) (sizeof(_a)/sizeof(_a[0]))
 
 #define CMD_PREAMBLE	'+'
 #define CMD_STATUS	0x10
@@ -75,7 +83,7 @@ static void hexdump(const uint8_t *data, size_t len)
 	}
 }
 
-static int writen(const struct cntx *cntx, const uint8_t *src, size_t howmuch)
+static int __must_check writen(const struct cntx *cntx, const uint8_t *src, size_t howmuch)
 {
 	int ret;
 
@@ -89,29 +97,39 @@ static int writen(const struct cntx *cntx, const uint8_t *src, size_t howmuch)
 	return ret;
 }
 
-static int write32(const struct cntx *cntx, uint32_t value)
+static int __must_check write32(const struct cntx *cntx, uint32_t value)
 {
 	uint32_t tmp;
+	int ret;
 
 	tmp = htobe32(value);
-	writen(cntx, (uint8_t*) &tmp, sizeof(tmp));
+	ret = writen(cntx, (uint8_t*) &tmp, sizeof(tmp));
+	if (ret != sizeof(tmp))
+		return -EIO;
 
 	return 0;
 }
 
-static int write16(const struct cntx *cntx, uint16_t value)
+static int __must_check write16(const struct cntx *cntx, uint16_t value)
 {
 	uint16_t tmp;
+	int ret;
 
 	tmp = htobe16(value);
-	writen(cntx, (uint8_t*) &tmp, sizeof(tmp));
+	ret = writen(cntx, (uint8_t*) &tmp, sizeof(tmp));
+	if (ret != sizeof(tmp))
+		return -EIO;
 
 	return 0;
 }
 
-static int write8(const struct cntx *cntx, uint8_t value)
+static int __must_check write8(const struct cntx *cntx, uint8_t value)
 {
-	writen(cntx, &value, sizeof(value));
+	int ret;
+
+	ret = writen(cntx, &value, sizeof(value));
+	if (ret)
+		return -EIO;
 
 	return 0;
 }
@@ -360,9 +378,18 @@ static int read_mem(struct cntx *cntx, uint8_t *whereto, uint32_t wherefrom, uin
 	int i, ret;
 
 	send_cmd(cntx, &pkt_memrd);
-	write32(cntx, wherefrom);
-	write32(cntx, howmuch);
-	write8(cntx, 0);
+
+	ret = write32(cntx, wherefrom);
+	if (ret)
+		return ret;
+
+	ret = write32(cntx, howmuch);
+	if (ret)
+		return ret;
+
+	ret = write8(cntx, 0);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < howmuch; i++)
 		ret = read8(cntx, whereto++);
@@ -389,15 +416,28 @@ static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
 {
 	uint32_t addr = ADDR_FIFO;
 	uint32_t len = howmuch;
+	int ret;
 	int i;
 
 	send_cmd(cntx, &pkt_memwr);
-	write32(cntx, addr);
-	write32(cntx, len);
-	write8(cntx, 0);
 
-	for (i = 0; i < len; i++)
-		write8(cntx, what[i]);
+	ret = write32(cntx, addr);
+	if (ret)
+		return ret;
+
+	ret = write32(cntx, len);
+	if (ret)
+		return ret;
+
+	ret = write8(cntx, 0);
+	if  (ret)
+		return ret;
+
+	for (i = 0; i < len; i++) {
+		ret = write8(cntx, what[i]);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -436,18 +476,18 @@ static void terminal(struct cntx *cntx)
 	{
 		uint8_t ch;
 		int ret;
-		struct pollfd pfd[2] = {
-		{
-			.fd = cntx->port_fd,
-			.events = POLLIN,
-		},
-		{
-			.fd = conn_fd,
-			.events = POLLIN,
-		},
+		struct pollfd pfd[] = {
+			{
+				.fd = cntx->port_fd,
+				.events = POLLIN,
+			},
+			{
+				.fd = conn_fd,
+				.events = POLLIN,
+			},
 		};
 
-		ret = poll(pfd, 2, -1);
+		ret = poll(pfd, ARRAY_SIZE(pfd), -1);
 		if (ret > 0) {
 			/* md -> us */
 			if (pfd[0].revents & POLLIN) {
@@ -463,20 +503,43 @@ static void terminal(struct cntx *cntx)
 	}
 }
 
+#define MODE_TERMINAL "terminal"
+
+static void usage(const char *progname)
+{
+	fprintf(stderr, "Usage: %s -p <port> -m <mode>\n", progname);
+	fprintf(stderr, "  Modes: terminal, vdc, rtc\n");
+}
+
 int main(int argc, char **argv)
 {
 	struct cntx cntx = { 0 };
-	const char *port_path;
+	const char *port_path = NULL;
+	const char *mode = NULL;
 	struct termios tty;
 	int port_fd;
 	int ret;
+	int opt;
 
-	if (argc == 1) {
-		printf("%s <serial port path>\n", argv[0]);
-		return 0;
+	while ((opt = getopt(argc, argv, "p:m:")) != -1) {
+		switch (opt) {
+		case 'p':
+			port_path = optarg;
+			break;
+		case 'm':
+			mode = optarg;
+			break;
+		default:
+			usage(argv[0]);
+			return 1;
+		}
 	}
 
-	port_path = argv[1];
+	if (!port_path || !mode) {
+		usage(argv[0]);
+		return 1;
+	}
+
 	port_fd = open(port_path, O_RDWR);
 	if (port_fd < 0) {
 		printf("failed to open serial port \'%s\': %d\n", port_path, port_fd);
@@ -502,8 +565,10 @@ int main(int argc, char **argv)
 	if (ret)
 		return 1;
 
-
-	terminal(&cntx);
+	if (strcmp(mode, MODE_TERMINAL) == 0)
+		terminal(&cntx);
+	else
+		fprintf(stderr, "Unknown mode: %s\n", mode);
 
 	//get_vdc(&cntx);
 

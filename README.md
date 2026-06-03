@@ -6,3 +6,8 @@
     ╚═╝     ╚═╝╚══════╝╚═════╝    ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝
 
 Linux tool for the Mega Everdrive USB port thingy
+
+
+# Links
+
+- The original/official tool code -> https://github.com/krikzz/mega-ed-pub/

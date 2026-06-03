@@ -128,7 +128,7 @@ static int __must_check write8(const struct cntx *cntx, uint8_t value)
 	int ret;
 
 	ret = writen(cntx, &value, sizeof(value));
-	if (ret)
+	if (ret != sizeof(value))
 		return -EIO;
 
 	return 0;

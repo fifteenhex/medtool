@@ -134,14 +134,14 @@ static int __must_check write8(const struct cntx *cntx, uint8_t value)
 	return 0;
 }
 
-static int send_cmd(const struct cntx *cntx, const struct everdrive_pkt_hdr *hdr)
+static int __must_check send_cmd(const struct cntx *cntx, const struct everdrive_pkt_hdr *hdr)
 {
 	int ret;
 
 	ret = writen(cntx, (uint8_t*) hdr, sizeof(*hdr));
 	if (ret != sizeof(*hdr)) {
 		printf("failed to write packet: %d\n", ret);
-		return -1;
+		return -EIO;
 	}
 
 	return 0;
@@ -188,15 +188,16 @@ static int readn(const struct cntx *cntx, uint8_t *dst, size_t howmuch)
 #ifdef DEBUG
 		if (ret != remaining)
 			printf("read %d bytes from serial port, wanted %d\n",
-				ret, (int) howmuch);
+				ret, (int) remaining);
 #endif
 
 		cur += ret;
 		remaining -= ret;
 	}
+
 #ifdef DEBUG
-	printf("<-- data in, %d bytes\n", ret);
-	hexdump(dst, ret);
+	printf("<-- data in, %zu bytes\n", howmuch);
+	hexdump(dst, howmuch);
 #endif
 
 	return howmuch;
@@ -210,10 +211,7 @@ static int read32(const struct cntx *cntx, uint32_t *result)
 
 	ret = readn(cntx, (uint8_t *) &tmp, len);
 	if (ret != len)
-	{
-		printf("whelp\n");
-		return -1;
-	}
+		return -EIO;
 
 	*result = be32toh(tmp);
 
@@ -229,7 +227,7 @@ static int read16(const struct cntx *cntx, uint16_t *result)
 
 	ret = readn(cntx, (uint8_t *) &tmp, len);
 	if (ret != len)
-		return -1;
+		return -EIO;
 
 	*result = be16toh(tmp);
 
@@ -245,7 +243,7 @@ static int read8(const struct cntx *cntx, uint8_t *result)
 
 	ret = readn(cntx, (uint8_t *) &tmp, len);
 	if (ret != len)
-		return -1;
+		return -EIO;
 
 	*result = tmp;
 
@@ -309,7 +307,8 @@ static int get_status(struct cntx *cntx)
 	return 0;
 }
 
-static int get_vdc(struct cntx *cntx)
+/* wip */
+static int do_vdc(struct cntx *cntx)
 {
 	uint16_t vdc;
 	int ret;
@@ -337,7 +336,8 @@ static int get_vdc(struct cntx *cntx)
 	return 0;
 }
 
-static int get_rtc(struct cntx *cntx)
+/* wip */
+static int do_rtc(struct cntx *cntx)
 {
 	uint8_t vdc;
 	int ret;
@@ -377,7 +377,9 @@ static int read_mem(struct cntx *cntx, uint8_t *whereto, uint32_t wherefrom, uin
 {
 	int i, ret;
 
-	send_cmd(cntx, &pkt_memrd);
+	ret = send_cmd(cntx, &pkt_memrd);
+	if (ret)
+		return ret;
 
 	ret = write32(cntx, wherefrom);
 	if (ret)
@@ -397,7 +399,7 @@ static int read_mem(struct cntx *cntx, uint8_t *whereto, uint32_t wherefrom, uin
 			return ret;
 	}
 
-	return i;
+	return 0;
 }
 
 static int read_rom(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
@@ -405,10 +407,12 @@ static int read_rom(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
 	return read_mem(cntx, whereto, ADDR_ROM, howmuch);
 }
 
+#if 0 /* reading the fifo isn't possible? there is only pc -> md fifo and no md -> pc fifo? */
 static int read_fifo(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
 {
 	return read_mem(cntx, whereto, ADDR_FIFO, howmuch);
 }
+#endif
 
 static int read_mapper(struct cntx *cntx, uint8_t *whereto, size_t howmuch)
 {
@@ -422,7 +426,9 @@ static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
 	int ret;
 	int i;
 
-	send_cmd(cntx, &pkt_memwr);
+	ret = send_cmd(cntx, &pkt_memwr);
+	if (ret)
+		return ret;
 
 	ret = write32(cntx, addr);
 	if (ret)
@@ -446,11 +452,12 @@ static int write_fifo(struct cntx *cntx, const uint8_t *what, size_t howmuch)
 }
 
 static int create_terminal_socket(const char *path) {
+	struct sockaddr_un addr = {
+		.sun_family = AF_UNIX,
+	};
 	int listen_fd, conn_fd;
-	struct sockaddr_un addr = {0};
 	int ret;
 
-	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, path);
 
 	listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -462,14 +469,16 @@ static int create_terminal_socket(const char *path) {
 	if (ret)
 		return ret;
 
-	listen(listen_fd, 1);
+	ret = listen(listen_fd, 1);
+	if (ret)
+		return ret;
 
 	conn_fd = accept(listen_fd, NULL, NULL);
 
 	return conn_fd;
 }
 
-static void terminal(struct cntx *cntx)
+static int do_terminal(struct cntx *cntx)
 {
 	int conn_fd;
 
@@ -506,15 +515,26 @@ static void terminal(struct cntx *cntx)
 			}
 		}
 	}
-}
 
-#define MODE_TERMINAL "terminal"
+	return 0;
+}
 
 static void usage(const char *progname)
 {
 	fprintf(stderr, "Usage: %s -p <port> -m <mode>\n", progname);
 	fprintf(stderr, "  Modes: terminal, vdc, rtc\n");
 }
+
+struct mode_handler {
+	const char *modestr;
+	int (*handler)(struct cntx *cntx);
+};
+
+static const struct mode_handler modes[] = {
+	{ .modestr = "terminal", .handler = do_terminal },
+	{ .modestr = "vdc", .handler = do_vdc },
+	{ .modestr = "rtc", .handler = do_rtc },
+};
 
 int main(int argc, char **argv)
 {
@@ -525,6 +545,7 @@ int main(int argc, char **argv)
 	int port_fd;
 	int ret;
 	int opt;
+	int i;
 
 	while ((opt = getopt(argc, argv, "p:m:")) != -1) {
 		switch (opt) {
@@ -570,9 +591,16 @@ int main(int argc, char **argv)
 	if (ret)
 		return 1;
 
-	if (strcmp(mode, MODE_TERMINAL) == 0)
-		terminal(&cntx);
-	else
+	for (i = 0; i < ARRAY_SIZE(modes); i++) {
+		const struct mode_handler *handler = &modes[i];
+
+		if (strcmp(mode, handler->modestr) == 0) {
+			handler->handler(&cntx);
+			break;
+		}
+	}
+
+	if (i == ARRAY_SIZE(modes))
 		fprintf(stderr, "Unknown mode: %s\n", mode);
 
 	//get_vdc(&cntx);

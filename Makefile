@@ -1,2 +1,2 @@
 medtool: medtool.c
-	$(CC) -Wall -g $< -o $@
+	$(CC) -Wall -ggdb $< -o $@

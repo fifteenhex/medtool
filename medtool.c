@@ -391,8 +391,11 @@ static int read_mem(struct cntx *cntx, uint8_t *whereto, uint32_t wherefrom, uin
 	if (ret)
 		return ret;
 
-	for (i = 0; i < howmuch; i++)
+	for (i = 0; i < howmuch; i++) {
 		ret = read8(cntx, whereto++);
+		if (ret)
+			return ret;
+	}
 
 	return i;
 }
@@ -456,6 +459,8 @@ static int create_terminal_socket(const char *path) {
 
 	unlink(path);
 	ret = bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr));
+	if (ret)
+		return ret;
 
 	listen(listen_fd, 1);
 

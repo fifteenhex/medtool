@@ -308,28 +308,35 @@ static int get_status(struct cntx *cntx)
 }
 
 /* wip */
+struct everdrive_vdc_readings {
+	uint16_t v50;
+	uint16_t v25;
+	uint16_t v12;
+	uint16_t vbat;
+};
+
 static int do_vdc(struct cntx *cntx)
 {
-	uint16_t vdc;
+	struct everdrive_vdc_readings vdc;
 	int ret;
 
 	ret = send_cmd(cntx, &pkt_vdc);
 	if (ret)
 		return ret;
 
-	ret = read16(cntx, &vdc);
+	ret = read16(cntx, &vdc.v50);
 	if (ret)
 		return ret;
 
-	ret = read16(cntx, &vdc);
+	ret = read16(cntx, &vdc.v25);
 	if (ret)
 		return ret;
 
-	ret = read16(cntx, &vdc);
+	ret = read16(cntx, &vdc.v12);
 	if (ret)
 		return ret;
 
-	ret = read16(cntx, &vdc);
+	ret = read16(cntx, &vdc.vbat);
 	if (ret)
 		return ret;
 
@@ -337,36 +344,45 @@ static int do_vdc(struct cntx *cntx)
 }
 
 /* wip */
+struct everdrive_rtc_datetime {
+	uint8_t year;
+	uint8_t month;
+	uint8_t dayofmonth;
+	uint8_t hour;
+	uint8_t minute;
+	uint8_t second;
+};
+
 static int do_rtc(struct cntx *cntx)
 {
-	uint8_t vdc;
+	struct everdrive_rtc_datetime rtc;
 	int ret;
 
 	ret = send_cmd(cntx, &pkt_rtc_get);
 	if (ret)
 		return ret;
 
-	ret = read8(cntx, &vdc);
+	ret = read8(cntx, &rtc.year);
 	if (ret)
 		return ret;
 
-	ret = read8(cntx, &vdc);
+	ret = read8(cntx, &rtc.month);
 	if (ret)
 		return ret;
 
-	ret = read8(cntx, &vdc);
+	ret = read8(cntx, &rtc.dayofmonth);
 	if (ret)
 		return ret;
 
-	ret = read8(cntx, &vdc);
+	ret = read8(cntx, &rtc.hour);
 	if (ret)
 		return ret;
 
-	ret = read8(cntx, &vdc);
+	ret = read8(cntx, &rtc.minute);
 	if (ret)
 		return ret;
 
-	ret = read8(cntx, &vdc);
+	ret = read8(cntx, &rtc.second);
 	if (ret)
 		return ret;
 

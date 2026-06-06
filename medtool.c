@@ -497,15 +497,18 @@ static int create_terminal_socket(const char *path) {
 static int do_terminal(struct cntx *cntx)
 {
 	int conn_fd;
+	int ret;
 
 	printf("Creating socket and waiting for connection (minicom -D unix#/tmp/medtool)\n");
 	conn_fd = create_terminal_socket("/tmp/medtool");
+	if (conn_fd < 0)
+		return -1;
+
 	printf("connected\n");
 
 	while(true)
 	{
 		uint8_t ch;
-		int ret;
 		struct pollfd pfd[] = {
 			{
 				.fd = cntx->port_fd,
@@ -518,15 +521,33 @@ static int do_terminal(struct cntx *cntx)
 		};
 
 		ret = poll(pfd, ARRAY_SIZE(pfd), -1);
+		if (ret < 0) {
+			printf("Failed to poll(): %d\n", errno);
+			return -1;
+		}
+
 		if (ret > 0) {
-			/* md -> us */
+			/* Check if poll returned because the serial port was pulled */
+			if (pfd[0].revents & (POLLHUP | POLLERR)) {
+				fprintf(stderr, "serial port disconnected\n");
+				ret = -EIO;
+				break;
+			}
+
+			/* Got md -> us */
 			if (pfd[0].revents & POLLIN) {
-				read(cntx->port_fd, &ch, 1);
+				ret = read(cntx->port_fd, &ch, 1);
+				if (ret != 1)
+					return -EIO;
+
 				write(conn_fd, &ch, 1);
 			}
-			/* us -> md */
+			/* Got us -> md */
 			if (pfd[1].revents & POLLIN) {
-				read(conn_fd, &ch, 1);
+				ret = read(conn_fd, &ch, 1);
+				if (ret != 1)
+					return -EIO;
+
 				write_fifo(cntx, &ch, 1);
 			}
 		}

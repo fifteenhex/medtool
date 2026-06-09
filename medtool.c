@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 #define debug(...)          printf(__VA_ARGS__)

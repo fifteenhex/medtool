@@ -17,6 +17,14 @@
 
 #define DEBUG
 
+#ifdef DEBUG
+#define debug(...)          printf(__VA_ARGS__)
+#define debug_hexdump(d, l) hexdump(d, l)
+#else
+#define debug(...)          do {} while(0)
+#define debug_hexdump(d, l) do {} while(0)
+#endif
+
 /* Make my C less awful helpers */
 #define __must_check __attribute__((warn_unused_result))
 #define ARRAY_SIZE(_a) (sizeof(_a)/sizeof(_a[0]))
@@ -89,10 +97,8 @@ static int __must_check writen(const struct cntx *cntx, const uint8_t *src, size
 {
 	int ret;
 
-#ifdef DEBUG
-	printf("data out, %d bytes -->\n", (int) howmuch);
-	hexdump(src, howmuch);
-#endif
+	debug("data out, %d bytes -->\n", (int) howmuch);
+	debug_hexdump(src, howmuch);
 
 	ret = write(cntx->port_fd, src, howmuch);
 
@@ -187,20 +193,16 @@ static int readn(const struct cntx *cntx, uint8_t *dst, size_t howmuch)
 		if (ret < 0)
 			return ret;
 
-#ifdef DEBUG
 		if (ret != remaining)
-			printf("read %d bytes from serial port, wanted %d\n",
+			debug("read %d bytes from serial port, wanted %d\n",
 				ret, (int) remaining);
-#endif
 
 		cur += ret;
 		remaining -= ret;
 	}
 
-#ifdef DEBUG
-	printf("<-- data in, %zu bytes\n", howmuch);
-	hexdump(dst, howmuch);
-#endif
+	debug("<-- data in, %zu bytes\n", howmuch);
+	debug_hexdump(dst, howmuch);
 
 	return howmuch;
 }
@@ -621,9 +623,7 @@ int main(int argc, char **argv)
 	cfmakeraw(&tty);
 	tcsetattr(port_fd, TCSANOW, &tty);
 
-#ifdef DEBUG
-	printf("Opened serial port %s\n", port_path);
-#endif
+	debug("Opened serial port %s\n", port_path);
 
 	/* Setup the context we'll pass around */
 	cntx.port_fd = port_fd;

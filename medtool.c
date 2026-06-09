@@ -29,6 +29,17 @@
 #define __must_check __attribute__((warn_unused_result))
 #define ARRAY_SIZE(_a) (sizeof(_a)/sizeof(_a[0]))
 
+/* clean up stuff */
+static void cleanup_fd(int *_fd)
+{
+	int fd = *_fd;
+
+	if (fd >= 0)
+		close(fd);
+}
+
+#define __cleanup_fd __attribute__((cleanup(cleanup_fd)))
+
 #define CMD_PREAMBLE	'+'
 #define CMD_STATUS	0x10
 #define CMD_GET_VDC	0x13
@@ -175,9 +186,13 @@ static int canread(const struct cntx *cntx)
 static int drain(const struct cntx *cntx)
 {
 	uint8_t junk[1];
+	int ret;
 
-	while (canread(cntx))
-		read(cntx->port_fd, junk, 1);
+	while (canread(cntx)) {
+		ret = read(cntx->port_fd, junk, 1);
+		if (ret < 0)
+			return ret;
+	}
 
 	return 0;
 }
@@ -475,7 +490,8 @@ static int create_terminal_socket(const char *path) {
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
-	int listen_fd, conn_fd;
+	int __cleanup_fd listen_fd = 0;
+	int conn_fd;
 	int ret;
 
 	strcpy(addr.sun_path, path);

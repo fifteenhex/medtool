@@ -664,27 +664,5 @@ int main(int argc, char **argv)
 	if (i == ARRAY_SIZE(modes))
 		fprintf(stderr, "Unknown mode: %s\n", mode);
 
-	//get_vdc(&cntx);
-
-	//get_rtc(&cntx);
-
-	//for (int i = 0; i < 1; i++) {
-	//	uint8_t ch;
-	//	read_fifo(&cntx, &ch, 1);
-	//	printf("\'%c\'\n", (char) ch);
-	//}
-
-	//const char test[] = "hello, world";
-	//write_fifo(&cntx, (uint8_t*) test, 1);
-
-	//uint8_t buf[1];
-	//return read_fifo(&cntx, buf, 2);
-
-	//uint8_t buf[64];
-	//read_rom(&cntx, buf, sizeof(buf));
-	//hexdump(buf, sizeof(buf));
-
-	//ret = get_status2(&cntx);
-
 	return 0;
 }

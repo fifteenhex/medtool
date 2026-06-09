@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <endian.h>
 #include <errno.h>
 #include <stdio.h>
@@ -48,6 +49,7 @@
 
 struct cntx {
 	int port_fd;
+	bool echo;
 };
 
 struct __attribute__((packed)) everdrive_pkt_hdr {
@@ -541,6 +543,8 @@ static int do_terminal(struct cntx *cntx)
 					return -EIO;
 
 				write(conn_fd, &ch, 1);
+				if (cntx->echo && isascii(ch))
+					write(STDOUT_FILENO, &ch, 1);
 			}
 			/* Got us -> md */
 			if (pfd[1].revents & POLLIN) {
@@ -558,8 +562,9 @@ static int do_terminal(struct cntx *cntx)
 
 static void usage(const char *progname)
 {
-	fprintf(stderr, "Usage: %s -p <port> -m <mode>\n", progname);
+	fprintf(stderr, "Usage: %s -p <port> -m <mode> [-e]\n", progname);
 	fprintf(stderr, "  Modes: terminal, vdc, rtc\n");
+	fprintf(stderr, "  -e    Echo incoming data to stdout (terminal mode only)\n");
 }
 
 struct mode_handler {
@@ -584,13 +589,16 @@ int main(int argc, char **argv)
 	int opt;
 	int i;
 
-	while ((opt = getopt(argc, argv, "p:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:m:e")) != -1) {
 		switch (opt) {
 		case 'p':
 			port_path = optarg;
 			break;
 		case 'm':
 			mode = optarg;
+			break;
+		case 'e':
+			cntx.echo = true;
 			break;
 		default:
 			usage(argv[0]);
